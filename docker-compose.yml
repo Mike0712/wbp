@@ -45,8 +45,7 @@ services:
       AUTH_BASE: http://auth-api:${AUTH_PORT}
       AGENTS_JSON: ${AGENTS_JSON}
     volumes:
-      - ./central/gateway:/app
-      - ./central/certs:/certs:ro
+      - ./gateway:/app
     depends_on:
       auth-api:
         condition: service_started
