@@ -1,0 +1,18 @@
+{
+  "name": "wb-webrtc-gateway",
+  "version": "1.0.0",
+  "main": "server.auth.js",
+  "type": "module",
+  "scripts": { "start": "node server.auth.js" },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.18.0",
+    "mediasoup": "^3.13.14",
+    "uuid": "^9.0.1",
+    "cors": "^2.8.5"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
+}

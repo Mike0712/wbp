@@ -1,0 +1,10 @@
+{
+  "name": "wb-auth-api",
+  "type": "module",
+  "dependencies": {
+    "express": "^4.19.2",
+    "knex": "^3.1.0",
+    "pg": "^8.11.5",
+    "uuid": "^9.0.1"
+  }
+}

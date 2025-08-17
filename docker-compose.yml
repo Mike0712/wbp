@@ -1,0 +1,77 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-wb}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wb}
+      POSTGRES_DB: ${POSTGRES_DB:-wb}
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    ports:
+      - 5432
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wb} -d ${POSTGRES_DB:-wb}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  auth-api: 
+    image: node:22.11.0-alpine3.20
+    environment:
+      TZ: ${TZ}
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      SID_TTL_SECONDS: ${SID_TTL_SECONDS:-900}
+      BOT_INTERNAL_SECRET: ${BOT_INTERNAL_SECRET}
+      PORT: ${AUTH_PORT:-8080}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./auth:/app
+    command: tail -f /dev/null    
+    expose:
+      - "8080"
+    working_dir: /app
+
+  gateway:
+    build:
+      context: ./central
+    environment:
+      TZ: ${TZ}
+      PORT: 8080
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN}
+      RTP_MIN_PORT: ${RTP_MIN_PORT}
+      RTP_MAX_PORT: ${RTP_MAX_PORT}
+      AUTH_BASE: http://auth-api:${AUTH_PORT}
+      AGENTS_JSON: ${AGENTS_JSON}
+    volumes:
+      - ./central/gateway:/app
+      - ./central/certs:/certs:ro
+    depends_on:
+      auth-api:
+        condition: service_started
+    ports:
+      - "8080:8080/tcp"
+      - "${RTP_MIN_PORT}-${RTP_MAX_PORT}:${RTP_MIN_PORT}-${RTP_MAX_PORT}/udp"
+    command: tail -f /dev/null
+    working_dir: /app
+
+  bot:
+    image: node:22.11.0-alpine3.20
+    environment:
+      TZ: ${TZ}
+      DATABASE_URL: postgres://${POSTGRES_USER:-wb}:${POSTGRES_PASSWORD:-wb}@postgres:5432/${POSTGRES_DB:-wb}
+      AUTH_URL: http://auth-api:${AUTH_PORT:-8080}/auth/issue-sid
+      BOT_INTERNAL_SECRET: ${BOT_INTERNAL_SECRET}
+      BOT_TOKEN: ${BOT_TOKEN}
+      PUBLIC_CLIENT_BASE: ${PUBLIC_CLIENT_BASE}
+    volumes:
+      - ./bot:/app  
+    command: tail -f /dev/null  
+    depends_on:
+      auth-api:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    working_dir: /app
