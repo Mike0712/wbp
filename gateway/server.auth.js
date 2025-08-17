@@ -37,14 +37,26 @@ const sellers = new Map(); // code -> { videoTransport, audioTransport, videoPro
 
 app.post('/api/rtp-endpoint/:sellerCode', async (req, res) => {
   const code = String(req.params.sellerCode);
-  const videoTransport = await router.createPlainTransport({ listenIp: { ip: '0.0.0.0', announcedIp: null }, rtcpMux: true, comedia: true });
-  const audioTransport = await router.createPlainTransport({ listenIp: { ip: '0.0.0.0', announcedIp: null }, rtcpMux: true, comedia: true });
+
+  const ANNOUNCED_IP = process.env.RTP_ANNOUNCED_IP || null;
+  
+  const videoTransport = await router.createPlainTransport({ 
+    listenIp: { ip: '0.0.0.0', announcedIp: ANNOUNCED_IP }, 
+    rtcpMux: true,
+    comedia: true
+  });
+  const audioTransport = await router.createPlainTransport({ 
+    listenIp: { ip: '0.0.0.0', announcedIp: ANNOUNCED_IP }, 
+    rtcpMux: true, 
+    comedia: true 
+  });
   const s = sellers.get(code) || {};
   s.videoTransport = videoTransport; s.audioTransport = audioTransport;
   sellers.set(code, s);
+
   res.json({
-    video: { ip: videoTransport.tuple.localIp, port: videoTransport.tuple.localPort },
-    audio: { ip: audioTransport.tuple.localIp, port: audioTransport.tuple.localPort },
+    video: { ip: ANNOUNCED_IP || videoTransport.tuple.localIp, port: videoTransport.tuple.localPort },
+    audio: { ip: ANNOUNCED_IP || audioTransport.tuple.localIp, port: audioTransport.tuple.localPort },
     videoPt: 102, audioPt: 111, rtcpMux: true
   });
 });

@@ -42,6 +42,7 @@ services:
       PUBLIC_DOMAIN: ${PUBLIC_DOMAIN}
       RTP_MIN_PORT: ${RTP_MIN_PORT}
       RTP_MAX_PORT: ${RTP_MAX_PORT}
+      RTP_ANNOUNCED_IP: ${RTP_ANNOUNCED_IP}
       AUTH_BASE: http://auth-api:${AUTH_PORT}
       AGENTS_JSON: ${AGENTS_JSON}
     volumes:
