@@ -35,7 +35,7 @@ services:
 
   gateway:
     build:
-      context: ./central
+      context: .
     environment:
       TZ: ${TZ}
       PORT: 8080
