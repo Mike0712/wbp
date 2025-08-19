@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as mediasoupClient from 'mediasoup-client';
+import { types } from 'mediasoup-client';
 
 type Props = {
   seller: string;
@@ -67,7 +68,7 @@ export default function Client({ seller, sid, wsPath = '/ws', className, style }
         setStatus('connecting ws…');
         ws = new WebSocket(wsUrl);
 
-        const send = (type: string, data: any) => {
+        const send = (type: string, data: object) => {
           try { ws?.send(JSON.stringify({ type, data })); } catch {}
         };
 
@@ -103,14 +104,14 @@ export default function Client({ seller, sid, wsPath = '/ws', className, style }
               });
 
               setStatus('transport ready');
-            } catch (e: any) {
-              setStatus(`device failed: ${e?.message || 'unknown'}`);
+            } catch (e) {
+              setStatus(`device failed: ${e instanceof Error ? e.message : 'unknown'}`);
             }
           }
 
           if (type === 'consumers') {
             setStatus('consuming…');
-            for (const c of data as any[]) {
+            for (const c of data as types.Consumer[]) {
               if (!recvTransport) continue;
               const consumer = await recvTransport.consume({
                 id: c.id,
@@ -128,8 +129,8 @@ export default function Client({ seller, sid, wsPath = '/ws', className, style }
 
         ws.onerror = () => setStatus('ws error');
         ws.onclose = () => setStatus('ws closed');
-      } catch (e: any) {
-        setStatus(`failed: ${e?.message || 'unknown'}`);
+      } catch (e) {
+        setStatus(`failed: ${e instanceof Error ? e.message : 'unknown'}`);
       }
 
       return cleanup;

@@ -47,7 +47,7 @@ services:
       AGENTS_JSON: ${AGENTS_JSON}
     volumes:
       - ./gateway:/app
-    command: ["node","server.auth.js"]
+    command: ["sh", "-lc", "npm run build && npm run start"]
     depends_on:
       auth-api:
         condition: service_started
