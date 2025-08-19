@@ -38,7 +38,7 @@ services:
       context: .
     environment:
       TZ: ${TZ}
-      PORT: 8080
+      PORT: ${AUTH_PORT}
       PUBLIC_DOMAIN: ${PUBLIC_DOMAIN}
       RTP_MIN_PORT: ${RTP_MIN_PORT}
       RTP_MAX_PORT: ${RTP_MAX_PORT}
@@ -52,7 +52,7 @@ services:
       auth-api:
         condition: service_started
     ports:
-      - "8080:8080/tcp"
+      - "${AUTH_PORT}:${AUTH_PORT}/tcp"
       - "${RTP_MIN_PORT}-${RTP_MAX_PORT}:${RTP_MIN_PORT}-${RTP_MAX_PORT}/udp"
     working_dir: /app
 
