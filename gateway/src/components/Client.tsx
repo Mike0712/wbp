@@ -19,7 +19,6 @@ export default function Client({ seller, sid, wsPath = '/ws', className, style }
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
-    console.log(window, 'window')
     if (window !== undefined) {
         setMounted(true);
     }
@@ -63,8 +62,7 @@ export default function Client({ seller, sid, wsPath = '/ws', className, style }
     (async () => {
       try {
         const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-        const wsUrl = `${proto}://${window.location.host}`;
-        console.log(wsUrl, 'wsUrl');
+        const wsUrl = `${proto}://${window.location.host}/ws`;
         setStatus('connecting ws…');
         ws = new WebSocket(wsUrl);
 
@@ -79,6 +77,7 @@ export default function Client({ seller, sid, wsPath = '/ws', className, style }
 
         ws.onmessage = async (ev) => {
           const { type, data } = JSON.parse(ev.data);
+          console.log(type, data);
 
           if (type === 'error') {
             setStatus(`error: ${data}`);

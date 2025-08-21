@@ -5,8 +5,21 @@ import { WebRtcTransport } from 'mediasoup/types';
 
 const AUTH_BASE = process.env.AUTH_BASE;
 const AGENTS = (()=>{ try { return JSON.parse(process.env.AGENTS_JSON || '{}'); } catch { return {}; } })();
-
-function wsSend(ws: WebSocket, type: string, data: string | object | boolean) { try { ws.send(JSON.stringify({ type, data })); } catch {} }
+function wsSend(ws: WebSocket, type: string, data: string | object | boolean) { 
+  console.log('Trying to send', type, data, 'socket state:', ws.readyState);
+  if (ws.readyState !== WebSocket.OPEN) {
+    console.log('Socket not open, state:', ws.readyState);
+    return;
+  }
+  try { 
+    const message = JSON.stringify({ type, data });
+    console.log('Sending message:', message);
+    ws.send(message); 
+    console.log('Message sent successfully');
+  } catch (e) { 
+    console.error('Error sending message:', e); 
+  } 
+}
 
 function getAgentSocket(code: string) {
   const s = sellers.get(code); if (!s) return null;
@@ -23,24 +36,29 @@ async function validateSid({ sid, sellerCode }: {sid: string, sellerCode: string
   u.searchParams.set('seller', sellerCode);
   const r = await fetch(u.toString());
   if (!r.ok) return { ok:false };
-  return r.json();
+  return await r.json();
 }
 
 export const handleWs = async (socket: WebSocket) => {
-  socket.send(JSON.stringify({ type: 'hello', ts: Date.now() }))
+  wsSend(socket, 'hello', '')
+  socket.send(JSON.stringify({ type: 'hello', data: {}, ts: Date.now() }))
   // keep-alive
   const ping = setInterval(() => {
     if (socket.readyState === socket.OPEN) socket.ping()
-  }, 30000)
+  }, 30000);
   let transportRecv: null | WebRtcTransport;
   socket.on('message', async (msg: string) => {
+    // wsSend(socket, 'hello', 'hui');
     const { type, data } = JSON.parse(msg.toString());
-    const sellerCode = data.sellerCode;
     try {
       if (type === 'join') {
+        const sellerCode = data.sellerCode;
         const sid = data.sid;
         const v = await validateSid({ sid, sellerCode });
-        if (!v.ok) { wsSend(socket, 'error', 'auth_failed'); return; }
+        if (!v.ok) {
+          wsSend(socket, 'error', 'auth_failed');
+          return; 
+        }
         const r = await router();
         const s = sellers.get(sellerCode);
         if (!s || !s.videoProducer) { wsSend(socket, 'error', 'stream_not_ready'); return; }
@@ -57,6 +75,7 @@ export const handleWs = async (socket: WebSocket) => {
           rtpCapabilities: r.rtpCapabilities
         });
       } else if (type === 'connect') {
+        const sellerCode = data.sellerCode;
         await transportRecv?.connect({ dtlsParameters: data.dtlsParameters });
         wsSend(socket, 'connected', true);
         const s = sellers.get(sellerCode);
@@ -78,6 +97,7 @@ export const handleWs = async (socket: WebSocket) => {
         }
         wsSend(socket, 'consumers', consumers);
       } else if (type === 'control') {
+        const sellerCode = data.sellerCode;
         const agent = getAgentSocket(sellerCode);
         if (agent && agent.readyState === WebSocket.OPEN) agent.send(JSON.stringify(data));
       }
@@ -87,4 +107,16 @@ export const handleWs = async (socket: WebSocket) => {
     }
   })
   socket.on('close', () => clearInterval(ping))
+
+  socket.on('error', (error: any) => {
+    // Проверяем, связана ли ошибка с HMR
+    if (error.message?.includes('invalid status code') || 
+       error.code === 'WS_ERR_INVALID_CLOSE_CODE') {
+       console.warn('WebSocket connection error (handled):', error.message);
+     } else {
+       console.error('WebSocket connection error:', error);
+     }
+     // Закрываем проблемное соединение
+     try { socket.terminate(); } catch {}
+  });
 }
