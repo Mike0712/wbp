@@ -108,7 +108,7 @@ export const handleWs = async (socket: WebSocket) => {
   })
   socket.on('close', () => clearInterval(ping))
 
-  socket.on('error', (error: any) => {
+  socket.on('error', (error: { message: string, code: string }) => {
     // Проверяем, связана ли ошибка с HMR
     if (error.message?.includes('invalid status code') || 
        error.code === 'WS_ERR_INVALID_CLOSE_CODE') {
