@@ -4,6 +4,8 @@ import r from '@/services/router';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   switch (req.method) {
+    case 'GET':
+       res.status(200).json({ ok: true, sellers });
     case 'POST':
         const code = String(req.query.sellerCode);
 
