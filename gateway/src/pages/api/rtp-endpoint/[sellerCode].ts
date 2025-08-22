@@ -3,8 +3,6 @@ import sellers from '@/services/sellers';
 import r from '@/services/router';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const code = String(req.query.sellerCode);
-
   switch (req.method) {
     case 'POST':
         const code = String(req.query.sellerCode);
