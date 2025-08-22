@@ -6,7 +6,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   switch (req.method) {
     case 'GET':
-        res.status(200).json({ ok: true, sellers });
+        res.json({ ok: true, sellers });
     case 'POST':
         const s = sellers.get(code);
         if (!s) return res.status(404).json({ error: 'no transport' });
