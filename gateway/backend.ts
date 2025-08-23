@@ -181,8 +181,9 @@ export function attachToServer(server: Server) {
   const _app = app as any
   server.on('request', (req: IncomingMessage, res) => {
     if (req.url?.startsWith('/api')) {
-      req.url = req.url.replace('/api', '')
-      _app(req, res)
+      const modifiedReq = Object.create(req);
+      modifiedReq.url = req.url.replace('/api', '');
+      _app(modifiedReq, res);
     }
   })
 
