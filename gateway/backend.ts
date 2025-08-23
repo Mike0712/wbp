@@ -32,7 +32,7 @@ const r = (async () => {
 
 const sellers = new Map(); // code -> { videoTransport, audioTransport, videoProducer, audioProducer, agentWS }
 
-export const API_ENDPOINTS = ['/api/rtpCapabilities', '/api/rtp-endpoint', '/api/rtp-producers'];
+export const API_ENDPOINTS = ['/rtpCapabilities', '/api/rtp-endpoint', '/api/rtp-producers'];
 
 async function handleRequest(req: IncomingMessage, res: ServerResponse) {
   const url = new URL(req.url || '', `http://${req.headers.host}`);
