@@ -15,6 +15,14 @@ const AUTH_BASE = process.env.AUTH_BASE;
 // Создаем Express приложение
 const app = express()
 
+// Middleware для обработки /api префикса
+app.use((req, _res, next) => {
+  if (req.url?.startsWith('/api/')) {
+    req.url = req.url.slice(4); // Remove /api
+  }
+  next();
+});
+
 const w = async () => {
   const worker = await mediasoup.createWorker({ rtcMinPort: RTP_MIN_PORT, rtcMaxPort: RTP_MAX_PORT });
   worker.on('died', () => { console.error('mediasoup worker died'); process.exit(1); });
@@ -179,13 +187,7 @@ wss.on('connection', async (ws) => {
 export function attachToServer(server: Server) {
   // Обработка HTTP запросов
   const _app = app as any
-  server.on('request', (req: IncomingMessage, res) => {
-    if (req.url?.startsWith('/api')) {
-      const modifiedReq = Object.create(req);
-      modifiedReq.url = req.url.replace('/api', '');
-      _app(modifiedReq, res);
-    }
-  })
+  server.on('request', _app)
 
   // Обработка WebSocket
   server.on('upgrade', (request, socket, head) => {
