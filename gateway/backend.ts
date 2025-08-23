@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express'
 import { WebSocketServer } from 'ws'
 import { Server, IncomingMessage } from 'http'
 import * as mediasoup from 'mediasoup';
+import { AppData, WebRtcTransport } from 'mediasoup/types';
 import WebSocket from 'ws';
 import fetch from 'node-fetch';
 
@@ -119,8 +120,58 @@ const wss = new WebSocketServer({
 })
 
 // Обработчик WebSocket соединений
-wss.on('connection', (ws) => {
-  ws.on('message', (data) => {
+wss.on('connection', async (ws) => {
+  let transportRecv: WebRtcTransport<AppData> | null = null;
+  ws.on('message', async (msg) => {
+    const { type, data } = JSON.parse(msg.toString());
+    try {
+      if (type === 'join') {
+        const sellerCode = data.sellerCode;
+        const sid = data.sid;
+        const v = await validateSid({ sid, sellerCode }) as { ok: boolean };
+        if (!v.ok) { wsSend(ws, 'error', 'auth_failed'); return; }
+
+        const s = sellers.get(sellerCode);
+        if (!s || !s.videoProducer) { wsSend(ws, 'error', 'stream_not_ready'); return; }
+
+        const router = await r();
+        const webRtcTransport = await router.createWebRtcTransport({
+          listenIps: [{ ip: '0.0.0.0' }],
+          enableUdp: true, enableTcp: true, preferUdp: true
+        });
+        transportRecv = webRtcTransport;
+        wsSend(ws, 'webrtctransport', {
+          id: webRtcTransport.id,
+          iceParameters: webRtcTransport.iceParameters,
+          iceCandidates: webRtcTransport.iceCandidates,
+          dtlsParameters: webRtcTransport.dtlsParameters,
+          rtpCapabilities: router.rtpCapabilities
+        });
+      } else if (type === 'connect') {
+        const sellerCode = data.sellerCode;
+        if (!transportRecv) { wsSend(ws, 'error', 'transport_not_ready'); return; }
+        await transportRecv.connect({ dtlsParameters: data.dtlsParameters });
+        wsSend(ws, 'connected', true);
+        const s = sellers.get(sellerCode);
+        const consumers = [];
+        const router = await r();
+        if (s?.videoProducer) {
+          const c = await transportRecv.consume({ producerId: s.videoProducer.id, rtpCapabilities: router.rtpCapabilities });
+          consumers.push({ kind: 'video', id: c.id, producerId: s.videoProducer.id, rtpParameters: c.rtpParameters });
+          ws.once('close', () => c.close());
+        }
+        if (s?.audioProducer) {
+          const c = await transportRecv.consume({ producerId: s.audioProducer.id, rtpCapabilities: router.rtpCapabilities });
+          consumers.push({ kind: 'audio', id: c.id, producerId: s.audioProducer.id, rtpParameters: c.rtpParameters });
+          ws.once('close', () => c.close());
+        }
+        wsSend(ws, 'consumers', consumers);
+      } else if (type === 'control') {
+        const sellerCode = data.sellerCode;
+        const agent = getAgentSocket(sellerCode);
+        if (agent && agent.readyState === WebSocket.OPEN) agent.send(JSON.stringify({ ...data, sellerCode }));
+      }
+    } catch (e) { console.error(e); wsSend(ws, 'error', e instanceof Error ? e.message : 'unknown error'); }
   })
 })
 
