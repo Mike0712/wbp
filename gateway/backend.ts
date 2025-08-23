@@ -1,6 +1,5 @@
-import express, { Request, Response } from 'express'
 import { WebSocketServer } from 'ws'
-import { Server, IncomingMessage } from 'http'
+import { Server, IncomingMessage, ServerResponse } from 'http'
 import * as mediasoup from 'mediasoup';
 import { AppData, WebRtcTransport } from 'mediasoup/types';
 import WebSocket from 'ws';
@@ -11,17 +10,6 @@ const RTP_MIN_PORT = Number(process.env.RTP_MIN_PORT);
 const RTP_MAX_PORT = Number(process.env.RTP_MAX_PORT);
 const AGENTS = (()=>{ try { return JSON.parse(process.env.AGENTS_JSON || '{}'); } catch { return {}; } })();
 const AUTH_BASE = process.env.AUTH_BASE;
-
-// Создаем Express приложение
-const app = express()
-
-// Middleware для обработки /api префикса
-app.use((req, _res, next) => {
-  if (req.url?.startsWith('/api/')) {
-    req.url = req.url.slice(4); // Remove /api
-  }
-  next();
-});
 
 const w = async () => {
   const worker = await mediasoup.createWorker({ rtcMinPort: RTP_MIN_PORT, rtcMaxPort: RTP_MAX_PORT });
@@ -42,64 +30,85 @@ const r = (async () => {
 });
 
 
-// Базовые роуты
-app.get('/rtpCapabilities', async (_req, res) => {
-  const router = await r();
-  res.json(router.rtpCapabilities);
-});
-
 const sellers = new Map(); // code -> { videoTransport, audioTransport, videoProducer, audioProducer, agentWS }
 
-app.post('/rtp-endpoint/:sellerCode', async (req, res) => {
-  const code = String(req.params.sellerCode);
-
-  const ANNOUNCED_IP = process.env.RTP_ANNOUNCED_IP;
-  const router = await r();
+async function handleRequest(req: IncomingMessage, res: ServerResponse) {
+  const url = new URL(req.url || '', `http://${req.headers.host}`);
+  const path = url.pathname.replace('/api', '');
   
-  const videoTransport = await router.createPlainTransport({ 
-    listenIp: { ip: '0.0.0.0', announcedIp: ANNOUNCED_IP }, 
-    rtcpMux: true,
-    comedia: true
-  });
-  const audioTransport = await router.createPlainTransport({ 
-    listenIp: { ip: '0.0.0.0', announcedIp: ANNOUNCED_IP }, 
-    rtcpMux: true, 
-    comedia: true 
-  });
-  const s = sellers.get(code) || {};
-  s.videoTransport = videoTransport; s.audioTransport = audioTransport;
-  sellers.set(code, s);
-
-  res.json({
-    video: { ip: ANNOUNCED_IP || videoTransport.tuple.localIp, port: videoTransport.tuple.localPort },
-    audio: { ip: ANNOUNCED_IP || audioTransport.tuple.localIp, port: audioTransport.tuple.localPort },
-    videoPt: 102, audioPt: 111, rtcpMux: true
-  });
-});
-
-app.post('/rtp-producers/:sellerCode', async (req, res) => {
-  const code = String(req.params.sellerCode);
-  const s = sellers.get(code);
-  if (!s) return res.status(404).json({ error: 'no transport' });
-  try {
-    if (!s.videoProducer) {
-      s.videoProducer = await s.videoTransport.produce({
-        kind: 'video',
-        rtpParameters: { codecs: [{ mimeType: 'video/H264', clockRate: 90000, payloadType: 102, parameters: { 'packetization-mode': 1 } }], encodings: [{ ssrc: Math.floor(Math.random()*1e9) }] }
-      });
-    }
-    if (!s.audioProducer) {
-      s.audioProducer = await s.audioTransport.produce({
-        kind: 'audio',
-        rtpParameters: { codecs: [{ mimeType: 'audio/opus', clockRate: 48000, channels: 2, payloadType: 111 }], encodings: [{ ssrc: Math.floor(Math.random()*1e9) }] }
-      });
-    }
-    res.json({ ok:true });
-  } catch (e) {
-    console.error('produce_failed', e);
-    res.status(500).json({ error: 'produce_failed' });
+  // GET /rtpCapabilities
+  if (req.method === 'GET' && path === '/rtpCapabilities') {
+    const router = await r();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(router.rtpCapabilities));
+    return;
   }
-});
+
+  // POST /rtp-endpoint/:sellerCode
+  if (req.method === 'POST' && path.startsWith('/rtp-endpoint/')) {
+    const code = path.split('/').pop() || '';
+    const ANNOUNCED_IP = process.env.RTP_ANNOUNCED_IP;
+    const router = await r();
+    
+    const videoTransport = await router.createPlainTransport({ 
+      listenIp: { ip: '0.0.0.0', announcedIp: ANNOUNCED_IP }, 
+      rtcpMux: true,
+      comedia: true
+    });
+    const audioTransport = await router.createPlainTransport({ 
+      listenIp: { ip: '0.0.0.0', announcedIp: ANNOUNCED_IP }, 
+      rtcpMux: true, 
+      comedia: true 
+    });
+    const s = sellers.get(code) || {};
+    s.videoTransport = videoTransport; s.audioTransport = audioTransport;
+    sellers.set(code, s);
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      video: { ip: ANNOUNCED_IP || videoTransport.tuple.localIp, port: videoTransport.tuple.localPort },
+      audio: { ip: ANNOUNCED_IP || audioTransport.tuple.localIp, port: audioTransport.tuple.localPort },
+      videoPt: 102, audioPt: 111, rtcpMux: true
+    }));
+    return;
+  }
+
+  // POST /rtp-producers/:sellerCode
+  if (req.method === 'POST' && path.startsWith('/rtp-producers/')) {
+    const code = path.split('/').pop() || '';
+    const s = sellers.get(code);
+    if (!s) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'no transport' }));
+      return;
+    }
+    try {
+      if (!s.videoProducer) {
+        s.videoProducer = await s.videoTransport.produce({
+          kind: 'video',
+          rtpParameters: { codecs: [{ mimeType: 'video/H264', clockRate: 90000, payloadType: 102, parameters: { 'packetization-mode': 1 } }], encodings: [{ ssrc: Math.floor(Math.random()*1e9) }] }
+        });
+      }
+      if (!s.audioProducer) {
+        s.audioProducer = await s.audioTransport.produce({
+          kind: 'audio',
+          rtpParameters: { codecs: [{ mimeType: 'audio/opus', clockRate: 48000, channels: 2, payloadType: 111 }], encodings: [{ ssrc: Math.floor(Math.random()*1e9) }] }
+        });
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+    } catch (e) {
+      console.error('produce_failed', e);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'produce_failed' }));
+    }
+    return;
+  }
+
+  // 404 для всех остальных запросов
+  res.writeHead(404, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ error: 'not found' }));
+}
 
 function getAgentSocket(code: string) {
   const s = sellers.get(code); if (!s) return null;
@@ -186,8 +195,7 @@ wss.on('connection', async (ws) => {
 // Функция для подключения к существующему HTTP серверу
 export function attachToServer(server: Server) {
   // Обработка HTTP запросов
-  const _app = app as any
-  server.on('request', _app)
+  server.on('request', handleRequest);
 
   // Обработка WebSocket
   server.on('upgrade', (request, socket, head) => {
