@@ -62,7 +62,7 @@ export default function Client({ seller, sid, wsPath = '/ws', className, style }
     (async () => {
       try {
         const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-        const wsUrl = `${proto}://${window.location.host}/ws`;
+        const wsUrl = `${proto}://${window.location.host}/api-ws`;
         setStatus('connecting ws…');
         ws = new WebSocket(wsUrl);
 
