@@ -33,10 +33,6 @@ export default function Client({ seller, sid, wsPath = '/ws', className, style }
     let recvTransport: mediasoupClient.types.Transport | null = null;
     const consumers: mediasoupClient.types.Consumer[] = [];
 
-    const videoWrap = document.getElementById('video');
-    const videoEl = document.createElement('video');
-    videoEl.autoplay = true; videoEl.playsInline = true;
-
     const cleanup = () => {
       try { consumers.forEach(c => { try { c.close(); } catch {} }); } catch {}
       try { recvTransport?.close(); } catch {}
@@ -134,15 +130,15 @@ export default function Client({ seller, sid, wsPath = '/ws', className, style }
         };
         
         // (опционально) простые управлялки
-        if (videoWrap) {
-          videoWrap.addEventListener('mousemove', (e)=>{
-            const r = videoEl.getBoundingClientRect();
+        if (videoRef.current) {
+          videoRef.current.addEventListener('mousemove', (e)=>{
+            const r = videoRef.current!.getBoundingClientRect();
             if (!r.width || !r.height) return;
             const x = Math.round((e.clientX - r.left) / r.width * 1600);
             const y = Math.round((e.clientY - r.top)  / r.height * 900);
             send('control', { type:'mousemove', x, y, sellerCode: seller });
           });
-          videoWrap.addEventListener('click', ()=> send('control', { type:'click' }));
+          videoRef.current.addEventListener('click', ()=> send('control', { type:'click' }));
           window.addEventListener('keydown', (e)=> send('control', { type:'key', key: e.key }));
         }
 
@@ -174,6 +170,7 @@ export default function Client({ seller, sid, wsPath = '/ws', className, style }
   }
 
   return (
+    <>
     <div className={className} style={{ display:'flex', flexDirection:'column', height:'100%', ...style }}>
       <div style={{ padding: 8, background: '#f5f5f5', display:'flex', gap:8, alignItems:'center' }}>
         <strong>Seller:</strong> <code>{seller}</code>
@@ -183,8 +180,11 @@ export default function Client({ seller, sid, wsPath = '/ws', className, style }
         ref={wrapRef}
         style={{ flex: 1, background: '#111', display:'flex', alignItems:'center', justifyContent:'center' }}
       >
-        <em style={{ color:'#bbb' }}>Connecting…</em>
+      </div>
+      <div id="video" style={{ flex: 1, background: '#e3e3e3', display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <video ref={videoRef} style={{ maxWidth: '100%', maxHeight: '100%', background: '#e3e3e3' }} />
       </div>
     </div>
+    </>
   );
 }
