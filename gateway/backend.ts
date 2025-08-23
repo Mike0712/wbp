@@ -32,12 +32,21 @@ const r = (async () => {
 
 const sellers = new Map(); // code -> { videoTransport, audioTransport, videoProducer, audioProducer, agentWS }
 
+export const API_ENDPOINTS = ['/api/rtpCapabilities', '/api/rtp-endpoint', '/api/rtp-producers'];
+
 async function handleRequest(req: IncomingMessage, res: ServerResponse) {
   const url = new URL(req.url || '', `http://${req.headers.host}`);
-  const path = url.pathname.replace('/api', '');
+  const path = url.pathname;
+  
+  // Проверяем, что это наш API эндпоинт
+  if (!API_ENDPOINTS.some(endpoint => path.startsWith(endpoint))) {
+    return; // Пропускаем запрос дальше в Next.js
+  }
+  
+  const cleanPath = path.replace('/api', '');
   
   // GET /rtpCapabilities
-  if (req.method === 'GET' && path === '/rtpCapabilities') {
+  if (req.method === 'GET' && cleanPath === '/rtpCapabilities') {
     const router = await r();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(router.rtpCapabilities));
@@ -45,8 +54,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
   }
 
   // POST /rtp-endpoint/:sellerCode
-  if (req.method === 'POST' && path.startsWith('/rtp-endpoint/')) {
-    const code = path.split('/').pop() || '';
+  if (req.method === 'POST' && cleanPath.startsWith('/rtp-endpoint/')) {
+    const code = cleanPath.split('/').pop() || '';
     const ANNOUNCED_IP = process.env.RTP_ANNOUNCED_IP;
     const router = await r();
     
@@ -74,8 +83,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
   }
 
   // POST /rtp-producers/:sellerCode
-  if (req.method === 'POST' && path.startsWith('/rtp-producers/')) {
-    const code = path.split('/').pop() || '';
+  if (req.method === 'POST' && cleanPath.startsWith('/rtp-producers/')) {
+    const code = cleanPath.split('/').pop() || '';
     const s = sellers.get(code);
     if (!s) {
       res.writeHead(404, { 'Content-Type': 'application/json' });

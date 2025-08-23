@@ -13,9 +13,6 @@ async function main() {
 
   // Создаем HTTP сервер с кастомной обработкой маршрутов
   const server = createServer((req, res) => {
-    const parsedUrl = parse(req.url || '', true)
-    const { pathname } = parsedUrl
-    
     // Все запросы передаем в Next.js
     handle(req, res)
   })
