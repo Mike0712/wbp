@@ -43,18 +43,22 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     return; // Пропускаем запрос дальше в Next.js
   }
   
-  const cleanPath = path.replace('/api', '');
-  
   // GET /rtpCapabilities
-  if (req.method === 'GET' && cleanPath === '/rtpCapabilities') {
+  if (req.method === 'GET' && path === '/rtpCapabilities') {
     const router = await r();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(router.rtpCapabilities));
     return;
   }
 
+  const cleanPath = path.replace('/api', '');
   // POST /rtp-endpoint/:sellerCode
-  if (req.method === 'POST' && cleanPath.startsWith('/rtp-endpoint/')) {
+  if (cleanPath.startsWith('/rtp-endpoint/')) {
+    if (req.method !== 'POST') {
+      res.writeHead(405, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'method not allowed' }));
+      return;
+    }
     const code = cleanPath.split('/').pop() || '';
     const ANNOUNCED_IP = process.env.RTP_ANNOUNCED_IP;
     const router = await r();
@@ -83,7 +87,12 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
   }
 
   // POST /rtp-producers/:sellerCode
-  if (req.method === 'POST' && cleanPath.startsWith('/rtp-producers/')) {
+  if (cleanPath.startsWith('/rtp-producers/')) {
+    if (req.method !== 'POST') {
+      res.writeHead(405, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'method not allowed' }));
+      return;
+    }
     const code = cleanPath.split('/').pop() || '';
     const s = sellers.get(code);
     if (!s) {
