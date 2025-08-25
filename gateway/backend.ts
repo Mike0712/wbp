@@ -59,24 +59,30 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       res.end(JSON.stringify({ error: 'method not allowed' }));
       return;
     }
-    const code = cleanPath.split('/').pop() || '';
     const ANNOUNCED_IP = process.env.RTP_ANNOUNCED_IP;
-    const router = await r();
-    
-    const videoTransport = await router.createPlainTransport({ 
-      listenIp: { ip: '0.0.0.0', announcedIp: ANNOUNCED_IP }, 
-      rtcpMux: true,
-      comedia: true
-    });
-    const audioTransport = await router.createPlainTransport({ 
-      listenIp: { ip: '0.0.0.0', announcedIp: ANNOUNCED_IP }, 
-      rtcpMux: true, 
-      comedia: true 
-    });
+    const code = cleanPath.split('/').pop() || '';
     const s = sellers.get(code) || {};
-    s.videoTransport = videoTransport; s.audioTransport = audioTransport;
-    sellers.set(code, s);
-
+    let videoTransport, audioTransport;
+    if (s?.vTransport && s?.aTransport) {
+      videoTransport = s.vTransport;
+      audioTransport = s.aTransport;
+    } else {
+      const ANNOUNCED_IP = process.env.RTP_ANNOUNCED_IP;
+      const router = await r();
+      
+      videoTransport = await router.createPlainTransport({ 
+        listenIp: { ip: '0.0.0.0', announcedIp: ANNOUNCED_IP }, 
+        rtcpMux: true,
+        comedia: true
+      });
+      audioTransport = await router.createPlainTransport({ 
+        listenIp: { ip: '0.0.0.0', announcedIp: ANNOUNCED_IP }, 
+        rtcpMux: true, 
+        comedia: true 
+      });
+      s.videoTransport = videoTransport; s.audioTransport = audioTransport;
+      sellers.set(code, s);
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       video: { ip: ANNOUNCED_IP || videoTransport.tuple.localIp, port: videoTransport.tuple.localPort },
@@ -114,7 +120,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
         });
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true }));
+      res.end(JSON.stringify({ ok: true, s }));
     } catch (e) {
       console.error('produce_failed', e);
       res.writeHead(500, { 'Content-Type': 'application/json' });
