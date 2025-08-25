@@ -1,33 +1,12 @@
 import { WebSocketServer } from 'ws'
 import { Server, IncomingMessage, ServerResponse } from 'http'
-import * as mediasoup from 'mediasoup';
 import { AppData, WebRtcTransport } from 'mediasoup/types';
+import { getRouter } from './src/lib/router';
 import WebSocket from 'ws';
 import fetch from 'node-fetch';
 
-const PORT = process.env.PORT;
-const RTP_MIN_PORT = Number(process.env.RTP_MIN_PORT);
-const RTP_MAX_PORT = Number(process.env.RTP_MAX_PORT);
-const AGENTS = (()=>{ try { return JSON.parse(process.env.AGENTS_JSON || '{}'); } catch { return {}; } })();
+const AGENTS = (() => { try { return JSON.parse(process.env.AGENTS_JSON || '{}'); } catch { return {}; } })();
 const AUTH_BASE = process.env.AUTH_BASE;
-
-const w = async () => {
-  const worker = await mediasoup.createWorker({ rtcMinPort: RTP_MIN_PORT, rtcMaxPort: RTP_MAX_PORT });
-  worker.on('died', () => { console.error('mediasoup worker died'); process.exit(1); });
-  return worker;
-}
-
-const r = (async () => {
-  const worker = await w();
-  const router = await worker.createRouter({
-    mediaCodecs: [
-      { kind: 'audio', mimeType: 'audio/opus', clockRate: 48000, channels: 2 },
-      { kind: 'video', mimeType: 'video/H264', clockRate: 90000,
-        parameters: { 'packetization-mode': 1, 'profile-level-id': '42e01f', 'level-asymmetry-allowed': 1 } }
-    ]
-  });
-  return router;
-});
 
 
 const sellers = new Map(); // code -> { videoTransport, audioTransport, videoProducer, audioProducer, agentWS }
@@ -37,15 +16,15 @@ export const API_ENDPOINTS = ['/rtpCapabilities', '/api/rtp-endpoint', '/api/rtp
 async function handleRequest(req: IncomingMessage, res: ServerResponse) {
   const url = new URL(req.url || '', `http://${req.headers.host}`);
   const path = url.pathname;
-  
+
   // Проверяем, что это наш API эндпоинт
   if (!API_ENDPOINTS.some(endpoint => path.startsWith(endpoint))) {
     return; // Пропускаем запрос дальше в Next.js
   }
-  
+
   // GET /rtpCapabilities
   if (req.method === 'GET' && path === '/rtpCapabilities') {
-    const router = await r();
+    const router = await getRouter();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(router.rtpCapabilities));
     return;
@@ -68,17 +47,17 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       audioTransport = s.aTransport;
     } else {
       const ANNOUNCED_IP = process.env.RTP_ANNOUNCED_IP;
-      const router = await r();
-      
-      videoTransport = await router.createPlainTransport({ 
-        listenIp: { ip: '0.0.0.0', announcedIp: ANNOUNCED_IP }, 
+      const router = await getRouter();
+
+      videoTransport = await router.createPlainTransport({
+        listenIp: { ip: '0.0.0.0', announcedIp: ANNOUNCED_IP },
         rtcpMux: true,
         comedia: true
       });
-      audioTransport = await router.createPlainTransport({ 
-        listenIp: { ip: '0.0.0.0', announcedIp: ANNOUNCED_IP }, 
-        rtcpMux: true, 
-        comedia: true 
+      audioTransport = await router.createPlainTransport({
+        listenIp: { ip: '0.0.0.0', announcedIp: ANNOUNCED_IP },
+        rtcpMux: true,
+        comedia: true
       });
       s.videoTransport = videoTransport; s.audioTransport = audioTransport;
       sellers.set(code, s);
@@ -110,13 +89,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       if (!s.videoProducer) {
         s.videoProducer = await s.videoTransport.produce({
           kind: 'video',
-          rtpParameters: { codecs: [{ mimeType: 'video/H264', clockRate: 90000, payloadType: 102, parameters: { 'packetization-mode': 1 } }], encodings: [{ ssrc: Math.floor(Math.random()*1e9) }] }
+          rtpParameters: { codecs: [{ mimeType: 'video/H264', clockRate: 90000, payloadType: 102, parameters: { 'packetization-mode': 1 } }], encodings: [{ ssrc: Math.floor(Math.random() * 1e9) }] }
         });
       }
       if (!s.audioProducer) {
         s.audioProducer = await s.audioTransport.produce({
           kind: 'audio',
-          rtpParameters: { codecs: [{ mimeType: 'audio/opus', clockRate: 48000, channels: 2, payloadType: 111 }], encodings: [{ ssrc: Math.floor(Math.random()*1e9) }] }
+          rtpParameters: { codecs: [{ mimeType: 'audio/opus', clockRate: 48000, channels: 2, payloadType: 111 }], encodings: [{ ssrc: Math.floor(Math.random() * 1e9) }] }
         });
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -143,19 +122,19 @@ function getAgentSocket(code: string) {
   return ws;
 }
 
-function wsSend(ws: WebSocket, type: string, data: string | object | boolean) { try { ws.send(JSON.stringify({ type, data })); } catch {} }
+function wsSend(ws: WebSocket, type: string, data: string | object | boolean) { try { ws.send(JSON.stringify({ type, data })); } catch { } }
 
 async function validateSid({ sid, sellerCode }: { sid: string, sellerCode: string }) {
   const u = new URL('/auth/validate', AUTH_BASE);
   u.searchParams.set('sid', sid);
   u.searchParams.set('seller', sellerCode);
   const r = await fetch(u.toString());
-  if (!r.ok) return { ok:false };
+  if (!r.ok) return { ok: false };
   return r.json();
 }
 
 // WebSocket сервер
-const wss = new WebSocketServer({ 
+const wss = new WebSocketServer({
   noServer: true,
   maxPayload: 50 * 1024 * 1024 // 50MB
 })
@@ -175,7 +154,11 @@ wss.on('connection', async (ws) => {
         const s = sellers.get(sellerCode);
         if (!s || !s.videoProducer) { wsSend(ws, 'error', 'stream_not_ready'); return; }
 
-        const router = await r();
+        const router = await getRouter();
+        if (!router) {
+          wsSend(ws, 'error', 'router_not_ready');
+          return;
+        }
         const webRtcTransport = await router.createWebRtcTransport({
           listenIps: [{ ip: '0.0.0.0' }],
           enableUdp: true, enableTcp: true, preferUdp: true
@@ -195,7 +178,8 @@ wss.on('connection', async (ws) => {
         wsSend(ws, 'connected', true);
         const s = sellers.get(sellerCode);
         const consumers = [];
-        const router = await r();
+        const router = await getRouter();
+        if (!router) { wsSend(ws, 'error', 'router_not_ready'); return; }
         if (s?.videoProducer) {
           const c = await transportRecv.consume({ producerId: s.videoProducer.id, rtpCapabilities: router.rtpCapabilities });
           consumers.push({ kind: 'video', id: c.id, producerId: s.videoProducer.id, rtpParameters: c.rtpParameters });
