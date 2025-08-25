@@ -42,9 +42,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     const code = cleanPath.split('/').pop() || '';
     const s = sellers.get(code) || {};
     let videoTransport, audioTransport;
-    if (s?.vTransport && s?.aTransport) {
-      videoTransport = s.vTransport;
-      audioTransport = s.aTransport;
+    if (s?.videoTransport && s?.audioTransport) {
+      videoTransport = s.videoTransport;
+      audioTransport = s.audioTransport;
     } else {
       const ANNOUNCED_IP = process.env.RTP_ANNOUNCED_IP;
       const router = await getRouter();
